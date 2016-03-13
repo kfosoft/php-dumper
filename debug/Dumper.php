@@ -167,25 +167,34 @@ class Dumper
     }
 	
 	/**
-	 * @param mixed $var variable to be dumped
+	 * @param mixed $data variable to be dumped
      * @param integer $level depth level
+	 * @return string
 	 */
 	private static function jsonEncode($data, $level)
-	{            
-		if( is_array($data) || is_object($data) ) { 
-			$islist = is_array($data) && ( empty($data) || array_keys($data) === range(0,count($data)-1) ); 
-			
-			if( $islist ) { 
+	{ 
+		switch (gettype($data)) {
+			case 'array' :
+				$islist = is_array($data) && ( empty($data) || array_keys($data) === range(0,count($data)-1)); 
 				if (self::$_depth <= $level) {
 					$json = '"Array:[...]"';
+				} elseif (!$islist) {
+					$items = Array(); 
+					foreach( (array)$data as $key => $value ) { 
+						$key = strtr(trim($key), "\0", ':');
+						$items[] = self::jsonEncode("$key", $level+1) . ':' . self::jsonEncode($value, $level+1); 
+					}
+					$json = '{' . implode(',', $items) . '}'; 	
 				} else {
 					$closure = function ($data) use ($level) {
 						return \kfosoft\debug\Dumper::jsonEncode($data, $level+1);
 					};
 					$json = '[' . implode(',', array_map($closure, $data) ) . ']'; 
 				}
-			} else { 
-				$className = get_class($data);
+				
+				break;
+			case 'object' :
+				$className = addcslashes(get_class($data), "\\\"\n\r\t/" . chr(8) . chr(12));
 				if($className === 'Closure'){
 					$json = '"{Closure}"';
 			    } elseif (self::$_depth <= $level) {
@@ -199,55 +208,58 @@ class Dumper
 					}
 					$json = '{' . implode(',', $items) . '}'; 	
 				}
-			} 
-		} elseif( is_string($data) ) { 
-			# Escape non-printable or Non-ASCII characters. 
-			# I also put the \\ character first, as suggested in comments on the 'addclashes' page. 
-			$string = '"' . addcslashes($data, "\\\"\n\r\t/" . chr(8) . chr(12)) . '"'; 
-			$json   = ''; 
-			$len    = strlen($string); 
-			# Convert UTF-8 to Hexadecimal Codepoints. 
-			for( $i = 0; $i < $len; $i++ ) { 
-				
-				$char = $string[$i]; 
-				$c1 = ord($char); 
-				
-				# Single byte; 
-				if( $c1 <128 ) { 
-					$json .= ($c1 > 31) ? $char : sprintf("\\u%04x", $c1); 
-					continue; 
-				} 
-				
-				# Double byte 
-				$c2 = ord($string[++$i]); 
-				if ( ($c1 & 32) === 0 ) { 
-					$json .= sprintf("\\u%04x", ($c1 - 192) * 64 + $c2 - 128); 
-					continue; 
-				} 
-				
-				# Triple 
-				$c3 = ord($string[++$i]); 
-				if( ($c1 & 16) === 0 ) { 
-					$json .= sprintf("\\u%04x", (($c1 - 224) <<12) + (($c2 - 128) << 6) + ($c3 - 128)); 
-					continue; 
-				} 
+				break;
+			case 'string' :
+				# Escape non-printable or Non-ASCII characters. 
+				# I also put the \\ character first, as suggested in comments on the 'addclashes' page. 
+				$string = '"' . addcslashes($data, "\\\"\n\r\t/" . chr(8) . chr(12)) . '"'; 
+				$json   = ''; 
+				$len    = strlen($string); 
+				# Convert UTF-8 to Hexadecimal Codepoints. 
+				for( $i = 0; $i < $len; $i++ ) { 
 					
-				# Quadruple 
-				$c4 = ord($string[++$i]); 
-				if( ($c1 & 8 ) === 0 ) { 
-					$u = (($c1 & 15) << 2) + (($c2>>4) & 3) - 1; 
-				
-					$w1 = (54<<10) + ($u<<6) + (($c2 & 15) << 2) + (($c3>>4) & 3); 
-					$w2 = (55<<10) + (($c3 & 15)<<6) + ($c4-128); 
-					$json .= sprintf("\\u%04x\\u%04x", $w1, $w2); 
+					$char = $string[$i]; 
+					$c1 = ord($char); 
+					
+					# Single byte; 
+					if( $c1 <128 ) { 
+						$json .= ($c1 > 31) ? $char : sprintf("\\u%04x", $c1); 
+						continue; 
+					} 
+					
+					# Double byte 
+					$c2 = ord($string[++$i]); 
+					if ( ($c1 & 32) === 0 ) { 
+						$json .= sprintf("\\u%04x", ($c1 - 192) * 64 + $c2 - 128); 
+						continue; 
+					} 
+					
+					# Triple 
+					$c3 = ord($string[++$i]); 
+					if( ($c1 & 16) === 0 ) { 
+						$json .= sprintf("\\u%04x", (($c1 - 224) <<12) + (($c2 - 128) << 6) + ($c3 - 128)); 
+						continue; 
+					} 
+						
+					# Quadruple 
+					$c4 = ord($string[++$i]); 
+					if( ($c1 & 8 ) === 0 ) { 
+						$u = (($c1 & 15) << 2) + (($c2>>4) & 3) - 1; 
+					
+						$w1 = (54<<10) + ($u<<6) + (($c2 & 15) << 2) + (($c3>>4) & 3); 
+						$w2 = (55<<10) + (($c3 & 15)<<6) + ($c4-128); 
+						$json .= sprintf("\\u%04x\\u%04x", $w1, $w2); 
+					} 
 				} 
-			} 
-		} elseif( is_resource($data) ) { 
-			$json = '"{Resource}"';
-		} else { 
-			# int, floats, bools, null 
-			$json = strtolower(var_export( $data, true )); 
-		} 
+				break;
+			case 'resource' :
+				$json = '"{Resource}"';
+				break;
+			default:
+				# int, floats, bools, null 
+				$json = strtolower(var_export( $data, true )); 
+		}
+		
 		
 		return $json;
 	} 
