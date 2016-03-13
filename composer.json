@@ -1,0 +1,25 @@
+{
+    "name": "kfosoft/php-dumper",
+    "description": "PHP Dumper. Fork of Yii2 VarDumper",
+    "keywords": [
+        "php",
+        "var_dump",
+        "var_dumper",
+        "VarDump",
+        "VarDumper",
+        "Debug"
+    ],
+    "type": "library",
+    "authors": [
+        {
+            "name": "Cyril Turkevich",
+            "email": "cyril.turkevich@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.4.0"
+    },
+    "autoload": {
+        "psr-4": {"kfosoft\\": ""}
+    }
+}
